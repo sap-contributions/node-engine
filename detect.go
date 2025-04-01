@@ -1,10 +1,11 @@
 package nodeengine
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
-	"github.com/paketo-buildpacks/packit/v2"
+	"github.com/buildpacks/libcnb/v2"
 	"github.com/paketo-buildpacks/packit/v2/fs"
 )
 
@@ -13,16 +14,13 @@ type VersionParser interface {
 	ParseVersion(path string) (version string, err error)
 }
 
-type BuildPlanMetadata struct {
-	Version       string `toml:"version"`
-	VersionSource string `toml:"version-source"`
-}
+func Detect(nvmrcParser, nodeVersionParser VersionParser) libcnb.DetectFunc {
+	return func(context libcnb.DetectContext) (libcnb.DetectResult, error) {
+		requirements := []libcnb.BuildPlanRequire{
+			{Name: "syft"},
+		}
 
-func Detect(nvmrcParser, nodeVersionParser VersionParser) packit.DetectFunc {
-	return func(context packit.DetectContext) (packit.DetectResult, error) {
-		var requirements []packit.BuildPlanRequirement
-
-		projectPath := context.WorkingDir
+		projectPath := context.ApplicationPath
 		customProjPath := os.Getenv("BP_NODE_PROJECT_PATH")
 
 		if customProjPath != "" {
@@ -30,70 +28,71 @@ func Detect(nvmrcParser, nodeVersionParser VersionParser) packit.DetectFunc {
 			projectPath = filepath.Join(projectPath, customProjPath)
 			exists, err := fs.Exists(projectPath)
 			if err != nil {
-				return packit.DetectResult{}, err
+				return libcnb.DetectResult{}, err
 			}
 
 			if !exists {
-				return packit.DetectResult{},
-					packit.Fail.WithMessage("expected value derived from BP_NODE_PROJECT_PATH [%s] to be an existing directory", projectPath)
+				return libcnb.DetectResult{},
+					fmt.Errorf("expected value derived from BP_NODE_PROJECT_PATH [%s] to be an existing directory", projectPath)
 			}
 		}
 
 		version, err := nvmrcParser.ParseVersion(filepath.Join(projectPath, NvmrcSource))
 		if err != nil {
-			return packit.DetectResult{}, err
+			return libcnb.DetectResult{}, err
 		}
 
 		if version != "" {
-			requirements = append(requirements, packit.BuildPlanRequirement{
+			requirements = append(requirements, libcnb.BuildPlanRequire{
 				Name: Node,
-				Metadata: BuildPlanMetadata{
-					Version:       version,
-					VersionSource: NvmrcSource,
+				Metadata: map[string]interface{}{
+					"version":        version,
+					"version-source": NvmrcSource,
 				},
 			})
 		}
 
 		version = os.Getenv("BP_NODE_VERSION")
 		if version != "" {
-			requirements = append(requirements, packit.BuildPlanRequirement{
+			requirements = append(requirements, libcnb.BuildPlanRequire{
 				Name: Node,
-				Metadata: BuildPlanMetadata{
-					Version:       version,
-					VersionSource: "BP_NODE_VERSION",
+				Metadata: map[string]interface{}{
+					"version":        version,
+					"version-source": "BP_NODE_VERSION",
 				},
 			})
 		}
 
 		version, err = nodeVersionParser.ParseVersion(filepath.Join(projectPath, NodeVersionSource))
 		if err != nil {
-			return packit.DetectResult{}, err
+			return libcnb.DetectResult{}, err
 		}
 
 		if version != "" {
-			requirements = append(requirements, packit.BuildPlanRequirement{
+			requirements = append(requirements, libcnb.BuildPlanRequire{
 				Name: Node,
-				Metadata: BuildPlanMetadata{
-					Version:       version,
-					VersionSource: NodeVersionSource,
+				Metadata: map[string]interface{}{
+					"version":        version,
+					"version-source": NodeVersionSource,
 				},
 			})
 		}
 
-		return packit.DetectResult{
-			Plan: packit.BuildPlan{
-				Provides: []packit.BuildPlanProvision{
-					{Name: Node},
-				},
-				Requires: requirements,
-				Or: []packit.BuildPlan{
-					{
-						Provides: []packit.BuildPlanProvision{
-							{Name: Node},
-							{Name: Npm},
-						},
-						Requires: requirements,
+		return libcnb.DetectResult{
+			Pass: true,
+			Plans: []libcnb.BuildPlan{
+				{
+					Provides: []libcnb.BuildPlanProvide{
+						{Name: Node},
 					},
+					Requires: requirements,
+				},
+				{
+					Provides: []libcnb.BuildPlanProvide{
+						{Name: Node},
+						{Name: Npm},
+					},
+					Requires: requirements,
 				},
 			},
 		}, nil

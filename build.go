@@ -3,79 +3,62 @@ package nodeengine
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
-	"time"
 
+	"github.com/buildpacks/libcnb/v2"
 	"github.com/paketo-buildpacks/libnodejs"
-	"github.com/paketo-buildpacks/packit/v2"
+	"github.com/paketo-buildpacks/libpak/v2"
+	"github.com/paketo-buildpacks/libpak/v2/effect"
+	"github.com/paketo-buildpacks/libpak/v2/log"
+	"github.com/paketo-buildpacks/libpak/v2/sbom"
 	"github.com/paketo-buildpacks/packit/v2/cargo"
 	"github.com/paketo-buildpacks/packit/v2/chronos"
-	"github.com/paketo-buildpacks/packit/v2/postal"
-	"github.com/paketo-buildpacks/packit/v2/sbom"
-	"github.com/paketo-buildpacks/packit/v2/scribe"
 )
 
 //go:generate faux --interface EntryResolver --output fakes/entry_resolver.go
 type EntryResolver interface {
-	Resolve(name string, entries []packit.BuildpackPlanEntry, priorities []interface{}) (packit.BuildpackPlanEntry, []packit.BuildpackPlanEntry)
-	MergeLayerTypes(name string, entries []packit.BuildpackPlanEntry) (launch bool, build bool)
+	Resolve(name string, entries []libcnb.BuildpackPlanEntry, priorities []interface{}) (libcnb.BuildpackPlanEntry, []libcnb.BuildpackPlanEntry)
+	MergeLayerTypes(name string, entries []libcnb.BuildpackPlanEntry) (launch bool, build bool)
 }
 
-//go:generate faux --interface DependencyManager --output fakes/dependency_manager.go
-type DependencyManager interface {
-	Resolve(path, id, version, stack string) (postal.Dependency, error)
-	Deliver(dependency postal.Dependency, cnbPath, layerPath, platformPath string) error
-	GenerateBillOfMaterials(dependencies ...postal.Dependency) []packit.BOMEntry
-}
-
-//go:generate faux --interface SBOMGenerator --output fakes/sbom_generator.go
-type SBOMGenerator interface {
-	GenerateFromDependency(dependency postal.Dependency, dir string) (sbom.SBOM, error)
-}
-
-func IsLayerReusable(nodeLayer packit.Layer, depChecksum string, build bool, launch bool, logger scribe.Emitter) bool {
-	logger.Debug.Process("Checking if layer %s can be reused", nodeLayer.Path)
+func IsLayerReusable(nodeLayer libcnb.Layer, depChecksum string, build bool, launch bool, logger log.Logger) bool {
+	logger.Debug("Checking if layer %s can be reused", nodeLayer.Path)
 
 	metadata := nodeLayer.Metadata
 	cachedChecksum, _ := metadata[DepKey].(string)
-	logger.Debug.Subprocess("Checksum of dependency: %s", depChecksum)
-	logger.Debug.Subprocess("Checksum of layer: %s", cachedChecksum)
+	logger.Debug("Checksum of dependency: %s", depChecksum)
+	logger.Debug("Checksum of layer: %s", cachedChecksum)
 
 	cachedBuild, found := metadata[BuildKey].(bool)
 	buildOK := found && (build == cachedBuild)
-	logger.Debug.Subprocess("Build requirements match: %v", buildOK)
+	logger.Debug("Build requirements match: %v", buildOK)
 
 	cachedLaunch, found := metadata[LaunchKey].(bool)
 	launchOK := found && (launch == cachedLaunch)
-	logger.Debug.Subprocess("Launch requirements match: %v", launchOK)
-
-	logger.Debug.Break()
+	logger.Debug("Launch requirements match: %v", launchOK)
 
 	return cargo.Checksum(depChecksum).MatchString(cachedChecksum) && buildOK && launchOK
 }
 
-func Build(entryResolver EntryResolver, dependencyManager DependencyManager, sbomGenerator SBOMGenerator, logger scribe.Emitter, clock chronos.Clock) packit.BuildFunc {
-	return func(context packit.BuildContext) (packit.BuildResult, error) {
-		logger.Title("%s %s", context.BuildpackInfo.Name, context.BuildpackInfo.Version)
+func Build(entryResolver EntryResolver, logger log.Logger, clock chronos.Clock) libcnb.BuildFunc {
+	return func(context libcnb.BuildContext) (libcnb.BuildResult, error) {
+		logger.Title("%s %s", context.Buildpack.Info.Name, context.Buildpack.Info.Version)
 
-		var buildMetadata = packit.BuildMetadata{}
-		var launchMetadata = packit.LaunchMetadata{}
-		nodeLayer, err := context.Layers.Get(Node)
+		nodeLayer, err := context.Layers.Layer(Node)
 		if err != nil {
-			return packit.BuildResult{}, err
+			return libcnb.BuildResult{}, err
 		}
 
-		logger.Process("Resolving Node Engine version")
+		logger.Header("Resolving Node Engine version")
 
 		entry, allEntries := libnodejs.ResolveNodeVersion(entryResolver.Resolve, context.Plan)
 		if entry.Name == "" && len(allEntries) == 0 {
-			logger.Process("Node no longer requested by plan, satisfied by extension")
+			logger.Header("Node no longer requested by plan, satisfied by extension")
 
-			logger.Process("Setting up launch layer for environment variables")
+			logger.Header("Setting up launch layer for environment variables")
 			nodeLayer, err = nodeLayer.Reset()
 			if err != nil {
-				return packit.BuildResult{}, err
+				return libcnb.BuildResult{}, err
 			}
 
 			nodeLayer.Launch, nodeLayer.Build, nodeLayer.Cache = true, true, false
@@ -84,100 +67,81 @@ func Build(entryResolver EntryResolver, dependencyManager DependencyManager, sbo
 				LaunchKey: true,
 			}
 
-			nodeLayer.SharedEnv.Default("NODE_HOME", "")
+			nodeLayer.SharedEnvironment.Default("NODE_HOME", "")
 		} else {
-			logger.Candidates(allEntries)
+			logger.Body(allEntries)
 
 			version, _ := entry.Metadata["version"].(string)
-			dependency, err := dependencyManager.Resolve(filepath.Join(context.CNBPath, "buildpack.toml"), entry.Name, version, context.Stack)
+			buildpackMeta, err := libpak.NewBuildModuleMetadata(context.Buildpack.Metadata)
 			if err != nil {
-				return packit.BuildResult{}, err
+				return libcnb.BuildResult{}, fmt.Errorf("unable to create build module metadata\n%w", err)
+			}
+			dr, err := libpak.NewDependencyResolver(buildpackMeta, entry.Name)
+			if err != nil {
+				return libcnb.BuildResult{}, fmt.Errorf("unable to create dependency resolver\n%w", err)
 			}
 
-			logger.SelectedDependency(entry, dependency, clock.Now())
+			dc, err := libpak.NewDependencyCache(context.Buildpack.Info.ID, context.Buildpack.Info.Version, context.Buildpack.Path, context.Platform.Bindings, logger)
+			if err != nil {
+				return libcnb.BuildResult{}, fmt.Errorf("unable to create dependency cache\n%w", err)
+			}
+
+			dependency, err := dr.Resolve(entry.Name, version)
+			if err != nil {
+				return libcnb.BuildResult{}, err
+			}
+
+			logger.Body(entry, dependency, clock.Now())
 
 			sbomDisabled, err := checkSbomDisabled()
 			if err != nil {
-				return packit.BuildResult{}, err
-			}
-
-			var legacySBOM []packit.BOMEntry
-			if !sbomDisabled {
-				legacySBOM = dependencyManager.GenerateBillOfMaterials(dependency)
+				return libcnb.BuildResult{}, err
 			}
 
 			launch, build := entryResolver.MergeLayerTypes("node", context.Plan.Entries)
 
-			if build {
-				buildMetadata = packit.BuildMetadata{BOM: legacySBOM}
-			}
-
-			if launch {
-				launchMetadata = packit.LaunchMetadata{BOM: legacySBOM}
-			}
-
-			if IsLayerReusable(nodeLayer, dependency.Checksum, build, launch, logger) {
-				logger.Process("Reusing cached layer %s", nodeLayer.Path)
-				logger.Break()
+			if IsLayerReusable(nodeLayer, dependency.SHA256, build, launch, logger) {
+				logger.Header("Reusing cached layer %s", nodeLayer.Path)
 
 				nodeLayer.Launch, nodeLayer.Build, nodeLayer.Cache = launch, build, build
-				return packit.BuildResult{
-					Layers: []packit.Layer{nodeLayer},
-					Build:  buildMetadata,
-					Launch: launchMetadata,
+				return libcnb.BuildResult{
+					Layers: []libcnb.Layer{nodeLayer},
 				}, nil
 			}
 
-			logger.Process("Executing build process")
-
 			nodeLayer, err = nodeLayer.Reset()
 			if err != nil {
-				return packit.BuildResult{}, err
+				return libcnb.BuildResult{}, err
 			}
 
 			nodeLayer.Launch, nodeLayer.Build, nodeLayer.Cache = launch, build, build
 
 			nodeLayer.Metadata = map[string]interface{}{
-				DepKey:    dependency.Checksum,
+				DepKey:    dependency.SHA256,
 				BuildKey:  build,
 				LaunchKey: launch,
 			}
 
-			logger.Subprocess("Installing Node Engine %s", dependency.Version)
-			duration, err := clock.Measure(func() error {
-				return dependencyManager.Deliver(dependency, context.CNBPath, nodeLayer.Path, context.Platform.Path)
-			})
-			if err != nil {
-				return packit.BuildResult{}, err
-			}
+			logger.Titlef("Installing Node Engine %s", dependency.Version)
+			lc := libpak.NewDependencyLayerContributor(dependency, dc, libcnb.LayerTypes{
+				Build:  build,
+				Cache:  true,
+				Launch: launch,
+			}, logger)
 
-			logger.Action("Completed in %s", duration.Round(time.Millisecond))
-			logger.Break()
+			if err = lc.Contribute(&nodeLayer, nil); err != nil {
+				return libcnb.BuildResult{}, err
+			}
 
 			if sbomDisabled {
-				logger.Subprocess("Skipping SBOM generation for Node Engine")
-				logger.Break()
+				logger.Header("Skipping SBOM generation for Node Engine")
 			} else {
-				logger.GeneratingSBOM(nodeLayer.Path)
-				var sbomContent sbom.SBOM
-				duration, err = clock.Measure(func() error {
-					sbomContent, err = sbomGenerator.GenerateFromDependency(dependency, nodeLayer.Path)
-					return err
-				})
-				if err != nil {
-					return packit.BuildResult{}, err
-				}
-
-				logger.Action("Completed in %s", duration.Round(time.Millisecond))
-				logger.Break()
-
-				logger.FormattingSBOM(context.BuildpackInfo.SBOMFormats...)
-				nodeLayer.SBOM, err = sbomContent.InFormats(context.BuildpackInfo.SBOMFormats...)
-				if err != nil {
-					return packit.BuildResult{}, err
+				sbomScanner := sbom.NewSyftCLISBOMScanner(context.Layers, effect.CommandExecutor{}, logger)
+				if err := sbomScanner.ScanLayer(nodeLayer, nodeLayer.Path, libcnb.SyftJSON, libcnb.CycloneDXJSON); err != nil {
+					return libcnb.BuildResult{}, fmt.Errorf("unable to create Launch SBoM \n%w", err)
 				}
 			}
-			nodeLayer.SharedEnv.Default("NODE_HOME", nodeLayer.Path)
+			nodeLayer.SharedEnvironment.Default("NODE_HOME", nodeLayer.Path)
 		}
 
 		var optimizedMemory bool
@@ -185,33 +149,28 @@ func Build(entryResolver EntryResolver, dependencyManager DependencyManager, sbo
 			optimizedMemory = true
 		}
 
-		nodeLayer.SharedEnv.Default("NODE_ENV", "production")
-		nodeLayer.SharedEnv.Default("NODE_VERBOSE", "false")
-		nodeLayer.SharedEnv.Default("NODE_OPTIONS", "--use-openssl-ca")
+		nodeLayer.SharedEnvironment.Default("NODE_ENV", "production")
+		nodeLayer.SharedEnvironment.Default("NODE_VERBOSE", "false")
+		nodeLayer.SharedEnvironment.Default("NODE_OPTIONS", "--use-openssl-ca")
 		if optimizedMemory {
-			nodeLayer.LaunchEnv.Default("OPTIMIZE_MEMORY", "true")
+			nodeLayer.LaunchEnvironment.Default("OPTIMIZE_MEMORY", "true")
 		}
 
-		logger.EnvironmentVariables(nodeLayer)
-		nodeLayer.ExecD = []string{
-			filepath.Join(context.CNBPath, "bin", "optimize-memory"),
-			filepath.Join(context.CNBPath, "bin", "inspector"),
+		if err = libpak.NewHelperLayerContributor(context.Buildpack, logger, "optimize-memory", "inspector").Contribute(&nodeLayer); err != nil {
+			return libcnb.BuildResult{}, fmt.Errorf("unable to contribute helpers: %w", nodeLayer.Path, err)
 		}
 
-		logger.Subprocess("Writing exec.d/0-optimize-memory")
-		logger.Action("Calculates available memory based on container limits at launch time.")
-		logger.Action("Made available in the MEMORY_AVAILABLE environment variable.")
+		logger.Header("Writing exec.d/0-optimize-memory")
+		logger.Body("Calculates available memory based on container limits at launch time.")
+		logger.Body("Made available in the MEMORY_AVAILABLE environment variable.")
 		if optimizedMemory {
-			logger.Action("Assigns the NODE_OPTIONS environment variable with flag setting to optimize memory.")
-			logger.Action("Limits the total size of all objects on the heap to 75%% of the MEMORY_AVAILABLE.")
+			logger.Body("Assigns the NODE_OPTIONS environment variable with flag setting to optimize memory.")
+			logger.Body("Limits the total size of all objects on the heap to 75%% of the MEMORY_AVAILABLE.")
 		}
-		logger.Subprocess("Writing exec.d/1-inspector")
-		logger.Break()
+		logger.Header("Writing exec.d/1-inspector")
 
-		return packit.BuildResult{
-			Layers: []packit.Layer{nodeLayer},
-			Build:  buildMetadata,
-			Launch: launchMetadata,
+		return libcnb.BuildResult{
+			Layers: []libcnb.Layer{nodeLayer},
 		}, nil
 	}
 }
