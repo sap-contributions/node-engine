@@ -1,19 +1,24 @@
-package internal
+package optimizememory
 
 import (
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
-	"github.com/BurntSushi/toml"
+	"github.com/paketo-buildpacks/libpak/v2/sherpa"
 )
 
-func Run(environment map[string]string, output io.Writer, root string) error {
-	if _, ok := environment["MEMORY_AVAILABLE"]; !ok {
+type OptimizeMemory struct{}
+
+func (o *OptimizeMemory) Execute() (map[string]string, error) {
+	root := "/"
+
+	var memAvailable string
+
+	if memAvailable = sherpa.GetEnvWithDefault("MEMORY_AVAILABLE", ""); memAvailable == "" {
 		var path string
 
 		_, err := os.Stat(filepath.Join(root, "sys", "fs", "cgroup", "cgroup.controllers"))
@@ -23,44 +28,44 @@ func Run(environment map[string]string, output io.Writer, root string) error {
 		case errors.Is(err, os.ErrNotExist):
 			path = filepath.Join(root, "sys", "fs", "cgroup", "memory", "memory.limit_in_bytes")
 		default:
-			return err
+			return nil, err
 		}
 
 		if path != "" {
 			content, err := os.ReadFile(path)
 			if err != nil {
-				return err
+				return nil, err
 			}
 
-			environment["MEMORY_AVAILABLE"] = strings.TrimSpace(string(content))
+			memAvailable = strings.TrimSpace(string(content))
 		}
 	}
 
 	variables := map[string]string{}
-	if environment["MEMORY_AVAILABLE"] != "" && environment["MEMORY_AVAILABLE"] != "max" {
-		memory, err := strconv.Atoi(environment["MEMORY_AVAILABLE"])
+	if memAvailable != "" && memAvailable != "max" {
+		memory, err := strconv.Atoi(memAvailable)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		variables["MEMORY_AVAILABLE"] = strconv.Itoa(memory / (1024 * 1024))
 	}
 
-	if _, ok := environment["OPTIMIZE_MEMORY"]; ok {
+	if sherpa.ResolveBool("OPTIMIZE_MEMORY") {
 		if _, ok := variables["MEMORY_AVAILABLE"]; ok {
 			memoryMax, err := strconv.Atoi(variables["MEMORY_AVAILABLE"])
 			if err != nil {
-				return err
+				return nil, err
 			}
 
 			options := fmt.Sprintf("--max_old_space_size=%d", memoryMax*75/100)
-			if _, ok := environment["NODE_OPTIONS"]; ok {
-				options = strings.Join([]string{environment["NODE_OPTIONS"], options}, " ")
+			if opts := sherpa.GetEnvWithDefault("NODE_OPTIONS", ""); opts != "" {
+				options = strings.Join([]string{opts, options}, " ")
 			}
 
 			variables["NODE_OPTIONS"] = options
 		}
 	}
 
-	return toml.NewEncoder(output).Encode(variables)
+	return variables, nil
 }

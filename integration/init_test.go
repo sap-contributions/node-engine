@@ -29,6 +29,9 @@ var settings struct {
 		Processes struct {
 			Online string
 		}
+		Syft struct {
+			Online string
+		}
 	}
 
 	Buildpack struct {
@@ -37,6 +40,7 @@ var settings struct {
 	}
 
 	Config struct {
+		Syft      string `json:"syft"`
 		BuildPlan string `json:"build-plan"`
 	}
 }
@@ -108,6 +112,10 @@ func TestIntegration(t *testing.T) {
 
 	settings.Buildpacks.BuildPlan.Online, err = buildpackStore.Get.
 		Execute(settings.Config.BuildPlan)
+	Expect(err).NotTo(HaveOccurred())
+
+	settings.Buildpacks.Syft.Online, err = buildpackStore.Get.
+		Execute(settings.Config.Syft)
 	Expect(err).NotTo(HaveOccurred())
 
 	settings.Buildpacks.Processes.Online = filepath.Join("testdata", "processes_buildpack")

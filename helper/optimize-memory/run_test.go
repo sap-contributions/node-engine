@@ -1,4 +1,4 @@
-package internal_test
+package optimizememory_test
 
 import (
 	"bytes"
@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/paketo-buildpacks/node-engine/v5/cmd/optimize-memory/internal"
+	optimizememory "github.com/paketo-buildpacks/node-engine/v5/helper/optimize-memory"
 	"github.com/sclevine/spec"
 
 	. "github.com/onsi/gomega"
@@ -51,7 +51,7 @@ func testRun(t *testing.T, context spec.G, it spec.S) {
 
 			it("assigns it to the value of /sys/fs/cgroup/memory.max", func() {
 				buffer := bytes.NewBuffer(nil)
-				err := internal.Run(environment, buffer, root)
+				err := optimizememory.Run(environment, buffer, root)
 				Expect(err).NotTo(HaveOccurred())
 
 				Expect(buffer.String()).To(MatchTOML(`
@@ -67,7 +67,7 @@ func testRun(t *testing.T, context spec.G, it spec.S) {
 
 				it("does not assign it", func() {
 					buffer := bytes.NewBuffer(nil)
-					err := internal.Run(environment, buffer, root)
+					err := optimizememory.Run(environment, buffer, root)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(buffer.String()).To(BeEmpty())
 				})
@@ -81,7 +81,7 @@ func testRun(t *testing.T, context spec.G, it spec.S) {
 
 				it("does not assign it", func() {
 					buffer := bytes.NewBuffer(nil)
-					err := internal.Run(environment, buffer, root)
+					err := optimizememory.Run(environment, buffer, root)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(buffer.String()).To(BeEmpty())
 				})
@@ -91,7 +91,7 @@ func testRun(t *testing.T, context spec.G, it spec.S) {
 		context("when /sys/fs/cgroup/cgroup.controllers does not exist", func() {
 			it("assigns it to the value of /sys/fs/cgroup/memory/memory.limit_in_bytes", func() {
 				buffer := bytes.NewBuffer(nil)
-				err := internal.Run(environment, buffer, root)
+				err := optimizememory.Run(environment, buffer, root)
 				Expect(err).NotTo(HaveOccurred())
 
 				Expect(buffer.String()).To(MatchTOML(`
@@ -107,7 +107,7 @@ func testRun(t *testing.T, context spec.G, it spec.S) {
 
 				it("does not assign it", func() {
 					buffer := bytes.NewBuffer(nil)
-					err := internal.Run(environment, buffer, root)
+					err := optimizememory.Run(environment, buffer, root)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(buffer.String()).To(BeEmpty())
 				})
@@ -121,7 +121,7 @@ func testRun(t *testing.T, context spec.G, it spec.S) {
 
 				it("does not assign it", func() {
 					buffer := bytes.NewBuffer(nil)
-					err := internal.Run(environment, buffer, root)
+					err := optimizememory.Run(environment, buffer, root)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(buffer.String()).To(BeEmpty())
 				})
@@ -136,7 +136,7 @@ func testRun(t *testing.T, context spec.G, it spec.S) {
 
 		it("uses the value already set", func() {
 			buffer := bytes.NewBuffer(nil)
-			err := internal.Run(environment, buffer, root)
+			err := optimizememory.Run(environment, buffer, root)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(buffer.String()).To(MatchTOML(`
 				MEMORY_AVAILABLE = "4096"
@@ -152,7 +152,7 @@ func testRun(t *testing.T, context spec.G, it spec.S) {
 
 		it("configures NODE_OPTIONS", func() {
 			buffer := bytes.NewBuffer(nil)
-			err := internal.Run(environment, buffer, root)
+			err := optimizememory.Run(environment, buffer, root)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(buffer.String()).To(MatchTOML(`
 				MEMORY_AVAILABLE = "4096"
@@ -167,7 +167,7 @@ func testRun(t *testing.T, context spec.G, it spec.S) {
 
 			it("merges this option onto the end", func() {
 				buffer := bytes.NewBuffer(nil)
-				err := internal.Run(environment, buffer, root)
+				err := optimizememory.Run(environment, buffer, root)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(buffer.String()).To(MatchTOML(`
 				MEMORY_AVAILABLE = "4096"
@@ -189,7 +189,7 @@ func testRun(t *testing.T, context spec.G, it spec.S) {
 
 			it("returns an error", func() {
 				buffer := bytes.NewBuffer(nil)
-				err := internal.Run(environment, buffer, root)
+				err := optimizememory.Run(environment, buffer, root)
 				Expect(err).To(MatchError(ContainSubstring("cgroup.controllers: permission denied")))
 			})
 		})
@@ -202,7 +202,7 @@ func testRun(t *testing.T, context spec.G, it spec.S) {
 
 			it("returns an error", func() {
 				buffer := bytes.NewBuffer(nil)
-				err := internal.Run(environment, buffer, root)
+				err := optimizememory.Run(environment, buffer, root)
 				Expect(err).To(MatchError(ContainSubstring("memory.limit_in_bytes: no such file or directory")))
 			})
 		})
@@ -214,7 +214,7 @@ func testRun(t *testing.T, context spec.G, it spec.S) {
 
 			it("returns an error", func() {
 				buffer := bytes.NewBuffer(nil)
-				err := internal.Run(environment, buffer, root)
+				err := optimizememory.Run(environment, buffer, root)
 				Expect(err).To(MatchError(ContainSubstring(`parsing "not-an-integer": invalid syntax`)))
 			})
 		})
@@ -225,7 +225,7 @@ func testRun(t *testing.T, context spec.G, it spec.S) {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(buffer.Close()).To(Succeed())
 
-				err = internal.Run(environment, buffer, root)
+				err = optimizememory.Run(environment, buffer, root)
 				Expect(err).To(MatchError(ContainSubstring("output: file already closed")))
 			})
 		})

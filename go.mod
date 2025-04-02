@@ -2,6 +2,8 @@ module github.com/paketo-buildpacks/node-engine/v5
 
 go 1.24.1
 
+replace github.com/paketo-buildpacks/libnodejs => /Users/I549554/SAPDevelop/buildpacks/paketo/libnodejs
+
 require (
 	github.com/BurntSushi/toml v1.5.0
 	github.com/Masterminds/semver/v3 v3.3.1

@@ -1,4 +1,4 @@
-package internal_test
+package optimizememory_test
 
 import (
 	"testing"

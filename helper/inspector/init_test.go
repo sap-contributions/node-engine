@@ -1,4 +1,4 @@
-package internal_test
+package inspector_test
 
 import (
 	"testing"

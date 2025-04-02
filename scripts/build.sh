@@ -43,7 +43,7 @@ USAGE
 }
 
 function run::build() {
-  if [[ -f "${BUILDPACKDIR}/run/main.go" ]]; then
+  if [[ -f "${BUILDPACKDIR}/cmd/main/main.go" ]]; then
     pushd "${BUILDPACKDIR}/bin" > /dev/null || return
       printf "%s" "Building run... "
 
@@ -51,8 +51,8 @@ function run::build() {
       CGO_ENABLED=0 \
         go build \
           -ldflags="-s -w" \
-          -o "run" \
-            "${BUILDPACKDIR}/run"
+          -o "main" \
+            "${BUILDPACKDIR}/cmd/main"
 
       echo "Success!"
 
@@ -67,7 +67,7 @@ function run::build() {
       for name in "${names[@]}"; do
         printf "%s" "Linking ${name}... "
 
-        ln -sf "run" "${name}"
+        ln -sf "main" "${name}"
 
         echo "Success!"
       done
@@ -76,26 +76,21 @@ function run::build() {
 }
 
 function cmd::build() {
-  if [[ -d "${BUILDPACKDIR}/cmd" ]]; then
-    local name
-    for src in "${BUILDPACKDIR}"/cmd/*; do
-      name="$(basename "${src}")"
+  if [[ -f "${BUILDPACKDIR}/cmd/helper/main.go" ]]; then
+    pushd "${BUILDPACKDIR}/bin" > /dev/null || return
 
-      if [[ -f "${src}/main.go" ]]; then
-        printf "%s" "Building ${name}... "
+      printf "%s" "Building helper... "
 
-        GOOS="linux" \
-        CGO_ENABLED=0 \
-          go build \
-            -ldflags="-s -w" \
-            -o "${BUILDPACKDIR}/bin/${name}" \
-              "${src}/main.go"
+      GOOS="linux" \
+      CGO_ENABLED=0 \
+        go build \
+          -ldflags="-s -w" \
+          -o "helper" \
+            "${BUILDPACKDIR}/cmd/helper"
 
-        echo "Success!"
-      else
-        printf "%s" "Skipping ${name}... "
-      fi
-    done
+      echo "Success!"
+
+    popd > /dev/null || return
   fi
 }
 

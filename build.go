@@ -12,7 +12,6 @@ import (
 	"github.com/paketo-buildpacks/libpak/v2/log"
 	"github.com/paketo-buildpacks/libpak/v2/sbom"
 	"github.com/paketo-buildpacks/packit/v2/cargo"
-	"github.com/paketo-buildpacks/packit/v2/chronos"
 )
 
 //go:generate faux --interface EntryResolver --output fakes/entry_resolver.go
@@ -40,7 +39,7 @@ func IsLayerReusable(nodeLayer libcnb.Layer, depChecksum string, build bool, lau
 	return cargo.Checksum(depChecksum).MatchString(cachedChecksum) && buildOK && launchOK
 }
 
-func Build(entryResolver EntryResolver, logger log.Logger, clock chronos.Clock) libcnb.BuildFunc {
+func Build(entryResolver EntryResolver, logger log.Logger) libcnb.BuildFunc {
 	return func(context libcnb.BuildContext) (libcnb.BuildResult, error) {
 		logger.Title("%s %s", context.Buildpack.Info.Name, context.Buildpack.Info.Version)
 
@@ -91,7 +90,7 @@ func Build(entryResolver EntryResolver, logger log.Logger, clock chronos.Clock) 
 				return libcnb.BuildResult{}, err
 			}
 
-			logger.Body(entry, dependency, clock.Now())
+			logger.Body(entry, dependency)
 
 			sbomDisabled, err := checkSbomDisabled()
 			if err != nil {
@@ -129,7 +128,11 @@ func Build(entryResolver EntryResolver, logger log.Logger, clock chronos.Clock) 
 				Launch: launch,
 			}, logger)
 
-			if err = lc.Contribute(&nodeLayer, nil); err != nil {
+			if err = lc.Contribute(&nodeLayer, func(layer *libcnb.Layer, artifact *os.File) error {
+				logger.Debugf("Node Engine has been installed to %s", artifact.Name())
+
+				return nil
+			}); err != nil {
 				return libcnb.BuildResult{}, err
 			}
 

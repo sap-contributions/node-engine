@@ -1,11 +1,11 @@
-package internal_test
+package inspector_test
 
 import (
 	"bytes"
 	"os"
 	"testing"
 
-	"github.com/paketo-buildpacks/node-engine/v5/cmd/inspector/internal"
+	"github.com/paketo-buildpacks/node-engine/v5/helper/inspector"
 	"github.com/sclevine/spec"
 
 	. "github.com/onsi/gomega"
@@ -37,7 +37,7 @@ func testRun(t *testing.T, context spec.G, it spec.S) {
 			environment["NODE_OPTIONS"] = "--existing"
 			buffer := bytes.NewBuffer(nil)
 
-			err := internal.Run(environment, buffer, root)
+			err := inspector.Run(environment, buffer, root)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(buffer.String()).To(MatchTOML(`
@@ -53,7 +53,7 @@ func testRun(t *testing.T, context spec.G, it spec.S) {
 			it("sets the inspector port", func() {
 				buffer := bytes.NewBuffer(nil)
 
-				err := internal.Run(environment, buffer, root)
+				err := inspector.Run(environment, buffer, root)
 				Expect(err).NotTo(HaveOccurred())
 
 				Expect(buffer.String()).To(MatchTOML(`
@@ -70,7 +70,7 @@ func testRun(t *testing.T, context spec.G, it spec.S) {
 			it("does not change it", func() {
 				buffer := bytes.NewBuffer(nil)
 
-				err := internal.Run(environment, buffer, root)
+				err := inspector.Run(environment, buffer, root)
 				Expect(err).NotTo(HaveOccurred())
 
 				Expect(buffer.String()).To(BeEmpty())
@@ -83,7 +83,7 @@ func testRun(t *testing.T, context spec.G, it spec.S) {
 			environment["NODE_OPTIONS"] = "--existing"
 
 			buffer := bytes.NewBuffer(nil)
-			err := internal.Run(environment, buffer, root)
+			err := inspector.Run(environment, buffer, root)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(buffer.String()).To(BeEmpty())
 		})
