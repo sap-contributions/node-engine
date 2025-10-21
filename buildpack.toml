@@ -77,21 +77,6 @@ api = "0.7"
     version = "20.19.5"
 
   [[metadata.dependencies]]
-    checksum = "sha256:c0649af18e6a24f6fe5535a3e86b341dd49a8e71117c8b68bde973ef834f16f2"
-    cpe = "cpe:2.3:a:nodejs:node.js:22.19.0:*:*:*:*:*:*:*"
-    deprecation_date = "2027-04-30T00:00:00Z"
-    id = "node"
-    licenses = ["0BSD", "Apache-2.0", "Artistic-2.0", "BSD-2-Clause", "BSD-3-Clause", "BSD-4-Clause", "BSD-Source-Code", "CC0-1.0", "ECL-2.0", "ICU", "MIT", "MIT-0", "SHL-0.5", "SHL-0.51", "Unicode-TOU"]
-    name = "Node Engine"
-    purl = "pkg:generic/node@v22.19.0?checksum=c0649af18e6a24f6fe5535a3e86b341dd49a8e71117c8b68bde973ef834f16f2&download_url=https://nodejs.org/dist/v22.19.0/node-v22.19.0-linux-x64.tar.xz"
-    source = "https://nodejs.org/dist/v22.19.0/node-v22.19.0-linux-x64.tar.xz"
-    source-checksum = "sha256:c0649af18e6a24f6fe5535a3e86b341dd49a8e71117c8b68bde973ef834f16f2"
-    stacks = ["io.buildpacks.stacks.jammy", "*"]
-    strip-components = 1
-    uri = "https://nodejs.org/dist/v22.19.0/node-v22.19.0-linux-x64.tar.xz"
-    version = "22.19.0"
-
-  [[metadata.dependencies]]
     checksum = "sha256:00bbd05e306ea68b6e13e17360d0e2f680b493ef95f2fea1c4296ff7437530bc"
     cpe = "cpe:2.3:a:nodejs:node.js:22.20.0:*:*:*:*:*:*:*"
     deprecation_date = "2027-04-30T00:00:00Z"
@@ -105,6 +90,21 @@ api = "0.7"
     strip-components = 1
     uri = "https://nodejs.org/dist/v22.20.0/node-v22.20.0-linux-x64.tar.xz"
     version = "22.20.0"
+
+  [[metadata.dependencies]]
+    checksum = "sha256:71a04f4b9144870c9407b8019fe912514229e50246bc706862eded3ac8e9025d"
+    cpe = "cpe:2.3:a:nodejs:node.js:22.21.0:*:*:*:*:*:*:*"
+    deprecation_date = "2027-04-30T00:00:00Z"
+    id = "node"
+    licenses = ["0BSD", "Apache-2.0", "Artistic-2.0", "BSD-2-Clause", "BSD-3-Clause", "BSD-4-Clause", "BSD-Source-Code", "CC0-1.0", "ECL-2.0", "ICU", "MIT", "MIT-0", "SHL-0.5", "SHL-0.51", "Unicode-TOU"]
+    name = "Node Engine"
+    purl = "pkg:generic/node@v22.21.0?checksum=71a04f4b9144870c9407b8019fe912514229e50246bc706862eded3ac8e9025d&download_url=https://nodejs.org/dist/v22.21.0/node-v22.21.0-linux-x64.tar.xz"
+    source = "https://nodejs.org/dist/v22.21.0/node-v22.21.0-linux-x64.tar.xz"
+    source-checksum = "sha256:71a04f4b9144870c9407b8019fe912514229e50246bc706862eded3ac8e9025d"
+    stacks = ["io.buildpacks.stacks.jammy", "*"]
+    strip-components = 1
+    uri = "https://nodejs.org/dist/v22.21.0/node-v22.21.0-linux-x64.tar.xz"
+    version = "22.21.0"
 
   [[metadata.dependency-constraints]]
     constraint = "18.*"
